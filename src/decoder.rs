@@ -1,6 +1,6 @@
-use crate::encoder::{HALF, M, self};
+use crate::encoder::{HALF, self};
 
-pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32]) -> Vec<u8> {
+pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32], m: usize) -> Vec<u8> {
     let mut text = Vec::new();
 
     let mut b = 0;
@@ -18,7 +18,7 @@ pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32]) ->
     }
 
     for _ in 0..symbols_count {
-        let s = interval_selection(v, &mut b, &mut l, &cumulative);
+        let s = interval_selection(v, &mut b, &mut l, &cumulative, m);
 
         text.push(s);
 
@@ -30,7 +30,7 @@ pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32]) ->
     return text;
 }
 
-pub fn adaptive_decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &mut [u32]) -> Vec<u8> {
+pub fn adaptive_decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &mut [u32], m: usize) -> Vec<u8> {
     let mut text = Vec::new();
 
     let mut b = 0;
@@ -48,8 +48,8 @@ pub fn adaptive_decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &
     }
 
     for i in 0..symbols_count {
-        let cm = i as u64 + 1 + M as u64;
-        let s = adaptive_interval_selection(v, &mut b, &mut l, cumulative, cm);
+        let cm = i as u64 + 1 + m as u64;
+        let s = adaptive_interval_selection(v, &mut b, &mut l, cumulative, cm, m);
 
         text.push(s);
 
@@ -57,16 +57,16 @@ pub fn adaptive_decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &
             decoder_renormalization(&mut v, &mut b, &mut l, &mut t, d, len);
         }
 
-        encoder::update_distribution(s, cumulative);
+        encoder::update_distribution(s, cumulative, m);
     }
 
     return text;
 }
 
-fn interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32]) -> u8 {
-    let mut s = M - 1;
+fn interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], m: usize) -> u8 {
+    let mut s = m - 1;
 
-    let temp = *l as u64 * cumulative[(M - 1) as usize] as u64;
+    let temp = *l as u64 * cumulative[(m - 1) as usize] as u64;
     let mut x = *b + (temp >> 32) as u32;
     let mut y = *b + *l;
 
@@ -96,14 +96,14 @@ fn interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32]) -> u
     *b = x;
     *l = y - *b;
 
-    return s;
+    return s.try_into().expect("symbol too large");
 }
 
-fn adaptive_interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64) -> u8 {
-    let mut s = M - 1;
+fn adaptive_interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64, m: usize) -> u8 {
+    let mut s = m - 1;
     let scale = u32::MAX as u64 / cm;
 
-    let temp = *l as u64 * cumulative[(M - 1) as usize] as u64 * scale;
+    let temp = *l as u64 * cumulative[(m - 1) as usize] as u64 * scale;
     let mut x = *b + (temp >> 32) as u32;
     let mut y = *b + *l;
 
@@ -133,7 +133,7 @@ fn adaptive_interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u
     *b = x;
     *l = y - *b;
 
-    return s;
+    return s.try_into().expect("symbol too large");
 }
 
 fn decoder_renormalization(
@@ -181,7 +181,7 @@ mod tests {
         let mut l = u32::MAX;
         let v = w + 10;
 
-        let s = interval_selection(v, &mut b, &mut l, &cumulative);
+        let s = interval_selection(v, &mut b, &mut l, &cumulative, 4);
 
         assert_eq!(1, s);
         assert_eq!(w, b + 1);
@@ -202,7 +202,7 @@ mod tests {
         let symbols_count = 6;
         let len = 13;
 
-        let text = decode(len, symbols_count, &d, &cumulative);
+        let text = decode(len, symbols_count, &d, &cumulative, 4);
 
         assert_eq!([2, 1, 0, 0, 1, 3], &text[..]);
     }
@@ -219,7 +219,24 @@ mod tests {
         let symbols_count = 6;
         let len = 15;
 
-        let text = adaptive_decode(len, symbols_count, &d, &mut cumulative);
+        let text = adaptive_decode(len, symbols_count, &d, &mut cumulative, 4);
+
+        assert_eq!([2, 1, 0, 0, 1, 3], &text[..]);
+    }
+
+    #[test]
+    fn adaptive_decode_256_signs_works() {
+        let mut cumulative = [0; 257];
+
+        for i in 0..257 {
+            cumulative[i] = i as u32;
+        }
+
+        let d = [1, 254, 255, 3, 246, 200];
+        let symbols_count = 6;
+        let len = 47;
+
+        let text = adaptive_decode(len, symbols_count, &d, &mut cumulative, 256);
 
         assert_eq!([2, 1, 0, 0, 1, 3], &text[..]);
     }

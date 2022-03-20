@@ -8,9 +8,8 @@ pub struct Encoded {
 }
 
 const P: usize = 32; // num bits in register
-pub const M: u8 = 4; // num signs in alphabet
 
-pub fn encode(data: &[u8], cumulative: &[u32]) -> Encoded {
+pub fn encode(data: &[u8], cumulative: &[u32], m: usize) -> Encoded {
     let mut d = vec![0];
 
     let mut b = 0;
@@ -19,7 +18,7 @@ pub fn encode(data: &[u8], cumulative: &[u32]) -> Encoded {
 
     for letter in data {
         let b_copy = b;
-        interval_update(*letter, &mut b, &mut l, &cumulative);
+        interval_update(*letter, &mut b, &mut l, &cumulative, m);
         // b > 1 -> b overflow
         if b < b_copy {
             propagate_carry(t, &mut d);
@@ -38,7 +37,7 @@ pub fn encode(data: &[u8], cumulative: &[u32]) -> Encoded {
     }
 }
 
-pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32]) -> Encoded {
+pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32], m: usize) -> Encoded {
     let mut d = vec![0];
 
     let mut b = 0;
@@ -47,8 +46,8 @@ pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32]) -> Encoded {
 
     for (k, letter) in data.iter().enumerate() {
         let b_copy = b;
-        let cm = k as u64 + 1 + M as u64;
-        adaptive_interval_update(*letter, &mut b, &mut l, &cumulative, cm);
+        let cm = k as u64 + 1 + m as u64;
+        adaptive_interval_update(*letter, &mut b, &mut l, &cumulative, cm, m);
         // b > 1 -> b overflow
         if b < b_copy {
             propagate_carry(t, &mut d);
@@ -58,7 +57,7 @@ pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32]) -> Encoded {
             encoder_renormalization(&mut b, &mut l, &mut t, &mut d);
         }
 
-        update_distribution(*letter, cumulative);
+        update_distribution(*letter, cumulative, m);
     }
 
     code_value_selection(b, &mut t, &mut d);
@@ -69,8 +68,8 @@ pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32]) -> Encoded {
     }
 }
 
-fn interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32]) {
-    let y = if letter == M - 1 {
+fn interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], m: usize) {
+    let y = if letter as usize == m - 1 {
         *b + *l
     } else {
         let temp = *l as u64 * cumulative[letter as usize + 1] as u64;
@@ -83,9 +82,9 @@ fn interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32]) {
     *l = y - *b;
 }
 
-fn adaptive_interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64) {
+fn adaptive_interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64, m: usize) {
     let scale = u32::MAX as u64 / cm;
-    let y = if letter == M - 1 {
+    let y = if letter as usize == m - 1 {
         *b + *l
     } else {
         let temp = *l as u64 * cumulative[letter as usize + 1] as u64 * scale;
@@ -161,9 +160,9 @@ fn code_value_selection(b: u32, t: &mut usize, d: &mut Vec<u8>) {
     }
 }
 
-pub fn update_distribution(symbol: u8, cumulative: &mut [u32]) {
-    for m in symbol+1..M {
-        cumulative[m as usize] += 1;
+pub fn update_distribution(symbol: u8, cumulative: &mut [u32], m: usize) {
+    for m in (symbol as usize) + 1..=m {
+        cumulative[m] += 1;
     }
 }
 
@@ -185,7 +184,7 @@ mod tests {
 
         assert_eq!(u32::MAX, w + x + y + z);
 
-        interval_update(letter, &mut b, &mut l, &cumulative);
+        interval_update(letter, &mut b, &mut l, &cumulative, 4);
 
         assert_eq!(w + x, b + 1);
         assert_eq!(y, l);
@@ -244,7 +243,7 @@ mod tests {
 
         let data = [2, 1, 0, 0, 1, 3];
 
-        let Encoded { data, len } = encode(&data, &cumulative);
+        let Encoded { data, len } = encode(&data, &cumulative, 4);
 
         assert_eq!(0b10111110, data[0]);
         assert_eq!(0b00100000, data[1]);
@@ -253,12 +252,12 @@ mod tests {
 
     #[test]
     fn update_distribution_works() {
-        let mut cumulative = [1, 1, 1, 1];
+        let mut cumulative = [1; 257];
         let symbol = 1;
 
-        update_distribution(symbol, &mut cumulative);
+        update_distribution(symbol, &mut cumulative, 256);
 
-        assert_eq!([1, 1, 2, 2], cumulative);
+        assert_eq!([2; 255], &cumulative[2..]);
     }
 
     #[test]
@@ -268,14 +267,37 @@ mod tests {
         let two = 1;
         let three = 1;
 
-        let mut cumulative = [0, zero, zero + one, zero + one + two, zero + one + two + three];
+        let mut cumulative = [
+            0,
+            zero,
+            zero + one,
+            zero + one + two,
+            zero + one + two + three,
+        ];
 
         let data = [2, 1, 0, 0, 1, 3];
 
-        let Encoded { data, len } = adaptive_encode(&data, &mut cumulative);
+        let Encoded { data, len } = adaptive_encode(&data, &mut cumulative, 4);
 
         assert_eq!(111, data[0]);
         assert_eq!(24, data[1]);
         assert_eq!(15, len);
+    }
+
+    #[test]
+    fn adaptive_encode_256_signs_works() {
+        let mut cumulative = [0; 257];
+
+        for i in 0..257 {
+            cumulative[i] = i as u32;
+        }
+
+        let data = [2, 1, 0, 0, 1, 3];
+
+        let Encoded { data, len } = adaptive_encode(&data, &mut cumulative, 256);
+
+        assert_eq!(1, data[0]);
+        assert_eq!(254, data[1]);
+        assert_eq!(47, len);
     }
 }
