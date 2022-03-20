@@ -2,9 +2,10 @@ use crate::bits;
 
 pub const HALF: u32 = 0b1000_0000_0000_0000_0000_0000_0000_0000;
 
+#[derive(Debug)]
 pub struct Encoded {
-    len: usize,
-    data: Vec<u8>,
+    pub len: usize,
+    pub data: Vec<u8>,
 }
 
 const P: usize = 32; // num bits in register
@@ -48,7 +49,7 @@ pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32], m: usize) -> Encoded
         let b_copy = b;
         let cm = k as u64 + 1 + m as u64;
         adaptive_interval_update(*letter, &mut b, &mut l, &cumulative, cm, m);
-        // b > 1 -> b overflow
+
         if b < b_copy {
             propagate_carry(t, &mut d);
         }
@@ -82,7 +83,14 @@ fn interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], m: 
     *l = y - *b;
 }
 
-fn adaptive_interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64, m: usize) {
+fn adaptive_interval_update(
+    letter: u8,
+    b: &mut u32,
+    l: &mut u32,
+    cumulative: &[u32],
+    cm: u64,
+    m: usize,
+) {
     let scale = u32::MAX as u64 / cm;
     let y = if letter as usize == m - 1 {
         *b + *l

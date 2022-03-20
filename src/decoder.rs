@@ -1,4 +1,4 @@
-use crate::encoder::{HALF, self};
+use crate::encoder::{self, HALF};
 
 pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32], m: usize) -> Vec<u8> {
     let mut text = Vec::new();
@@ -30,14 +30,20 @@ pub fn decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &[u32], m:
     return text;
 }
 
-pub fn adaptive_decode(len: usize, symbols_count: usize, d: &[u8], cumulative: &mut [u32], m: usize) -> Vec<u8> {
+pub fn adaptive_decode(
+    len: usize,
+    symbols_count: usize,
+    d: &[u8],
+    cumulative: &mut [u32],
+    m: usize,
+) -> Vec<u8> {
     let mut text = Vec::new();
 
     let mut b = 0;
     let mut l = u32::MAX;
     let mut v = 0;
 
-    let mut t = if len < 32 { len } else { 32 };
+    let mut t = if len < 32 { len - 1 } else { 31 };
 
     for i in 0..d.len() {
         if i > 3 {
@@ -99,7 +105,14 @@ fn interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], m: u
     return s.try_into().expect("symbol too large");
 }
 
-fn adaptive_interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], cm: u64, m: usize) -> u8 {
+fn adaptive_interval_selection(
+    v: u32,
+    b: &mut u32,
+    l: &mut u32,
+    cumulative: &[u32],
+    cm: u64,
+    m: usize,
+) -> u8 {
     let mut s = m - 1;
     let scale = u32::MAX as u64 / cm;
 
@@ -109,7 +122,7 @@ fn adaptive_interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u
 
     loop {
         if v >= *b {
-            if x >= *b && x < v {
+            if x >= *b && x <= v {
                 break;
             }
         } else {
@@ -150,9 +163,9 @@ fn decoder_renormalization(
 
         *t += 1;
 
-        if *t <= len {
+        if *t < len {
             let byte_index = *t / 8;
-            let bit_index = 8 - (*t % 8);
+            let bit_index = 8 - (*t % 8) - 1;
             let mask = 2_u8.pow(bit_index as u32);
 
             let mut bit = mask & d[byte_index];
@@ -214,7 +227,13 @@ mod tests {
         let two = 1;
         let three = 1;
 
-        let mut cumulative = [0, zero, zero + one, zero + one + two, zero + one + two + three];
+        let mut cumulative = [
+            0,
+            zero,
+            zero + one,
+            zero + one + two,
+            zero + one + two + three,
+        ];
         let d = [111, 24];
         let symbols_count = 6;
         let len = 15;
