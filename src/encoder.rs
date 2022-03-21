@@ -1,44 +1,15 @@
 use crate::bits;
+use crate::bits::BIT;
 
 pub const HALF: u32 = 0b1000_0000_0000_0000_0000_0000_0000_0000;
 
 #[derive(Debug)]
-pub struct Encoded {
+pub struct EncodedData {
     pub len: usize,
     pub data: Vec<u8>,
 }
 
-const P: usize = 32; // num bits in register
-
-pub fn encode(data: &[u8], cumulative: &[u32], m: usize) -> Encoded {
-    let mut d = vec![0];
-
-    let mut b = 0;
-    let mut l = u32::MAX;
-    let mut t = 8;
-
-    for letter in data {
-        let b_copy = b;
-        interval_update(*letter, &mut b, &mut l, &cumulative, m);
-        // b > 1 -> b overflow
-        if b < b_copy {
-            propagate_carry(t, &mut d);
-        }
-
-        if l <= HALF {
-            encoder_renormalization(&mut b, &mut l, &mut t, &mut d);
-        }
-    }
-
-    code_value_selection(b, &mut t, &mut d);
-
-    Encoded {
-        len: ((d.len() - 1) * 8) + 8 - t,
-        data: d,
-    }
-}
-
-pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32], m: usize) -> Encoded {
+pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32], m: usize) -> EncodedData {
     let mut d = vec![0];
 
     let mut b = 0;
@@ -63,24 +34,10 @@ pub fn adaptive_encode(data: &[u8], cumulative: &mut [u32], m: usize) -> Encoded
 
     code_value_selection(b, &mut t, &mut d);
 
-    Encoded {
+    EncodedData {
         len: ((d.len() - 1) * 8) + 8 - t,
         data: d,
     }
-}
-
-fn interval_update(letter: u8, b: &mut u32, l: &mut u32, cumulative: &[u32], m: usize) {
-    let y = if letter as usize == m - 1 {
-        *b + *l
-    } else {
-        let temp = *l as u64 * cumulative[letter as usize + 1] as u64;
-        *b + (temp >> 32) as u32
-    };
-
-    let temp = *l as u64 * cumulative[letter as usize] as u64;
-
-    *b += (temp >> 32) as u32;
-    *l = y - *b;
 }
 
 fn adaptive_interval_update(
@@ -125,24 +82,12 @@ fn encoder_renormalization(b: &mut u32, l: &mut u32, t: &mut usize, d: &mut Vec<
         *l <<= 1;
 
         if *b >= HALF {
-            push_into_d(t, BIT::ONE, d);
+            bits::push_into_d(t, BIT::ONE, d);
         } else {
-            push_into_d(t, BIT::ZERO, d);
+            bits::push_into_d(t, BIT::ZERO, d);
         }
 
         *b <<= 1;
-    }
-}
-
-enum BIT {
-    ZERO,
-    ONE,
-}
-
-fn push_into_d(t: &mut usize, bit: BIT, d: &mut Vec<u8>) {
-    if let BIT::ONE = bit {
-        let d_len = d.len();
-        bits::push_bit(&mut d[d_len - 1], *t);
     }
 }
 
@@ -155,7 +100,7 @@ fn code_value_selection(b: u32, t: &mut usize, d: &mut Vec<u8>) {
             *t -= 1;
         }
 
-        push_into_d(t, BIT::ONE, d);
+        bits::push_into_d(t, BIT::ONE, d);
     } else {
         propagate_carry(*t, d);
 
@@ -177,26 +122,6 @@ pub fn update_distribution(symbol: u8, cumulative: &mut [u32], m: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn interval_update_works() {
-        let w = u32::MAX / 4;
-        let x = w;
-        let y = w;
-        let z = u32::MAX - w - x - y;
-
-        let cumulative = [0, w, w + x, w + x + y, w + x + y + z];
-        let mut b = 0;
-        let mut l = u32::MAX;
-        let letter = 2;
-
-        assert_eq!(u32::MAX, w + x + y + z);
-
-        interval_update(letter, &mut b, &mut l, &cumulative, 4);
-
-        assert_eq!(w + x, b + 1);
-        assert_eq!(y, l);
-    }
 
     #[test]
     fn propagate_carry_works() {
@@ -242,23 +167,6 @@ mod tests {
     }
 
     #[test]
-    fn encode_works() {
-        let zero = u32::MAX / 5;
-        let one = u32::MAX / 2;
-        let two = zero;
-
-        let cumulative = [0, zero, zero + one, zero + one + two, u32::MAX];
-
-        let data = [2, 1, 0, 0, 1, 3];
-
-        let Encoded { data, len } = encode(&data, &cumulative, 4);
-
-        assert_eq!(0b10111110, data[0]);
-        assert_eq!(0b00100000, data[1]);
-        assert_eq!(13, len);
-    }
-
-    #[test]
     fn update_distribution_works() {
         let mut cumulative = [1; 257];
         let symbol = 1;
@@ -285,7 +193,7 @@ mod tests {
 
         let data = [2, 1, 0, 0, 1, 3];
 
-        let Encoded { data, len } = adaptive_encode(&data, &mut cumulative, 4);
+        let EncodedData { data, len } = adaptive_encode(&data, &mut cumulative, 4);
 
         assert_eq!(111, data[0]);
         assert_eq!(24, data[1]);
@@ -302,7 +210,7 @@ mod tests {
 
         let data = [2, 1, 0, 0, 1, 3];
 
-        let Encoded { data, len } = adaptive_encode(&data, &mut cumulative, 256);
+        let EncodedData { data, len } = adaptive_encode(&data, &mut cumulative, 256);
 
         assert_eq!(1, data[0]);
         assert_eq!(254, data[1]);

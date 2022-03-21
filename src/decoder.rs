@@ -78,7 +78,7 @@ fn interval_selection(v: u32, b: &mut u32, l: &mut u32, cumulative: &[u32], m: u
 
     loop {
         if v >= *b {
-            if x >= *b && x < v {
+            if x >= *b && x <= v {
                 break;
             }
         } else {

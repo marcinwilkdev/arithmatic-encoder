@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 structopt = "0.3"
+entropy_calculator = { git = "https://github.com/marcinwilkdev/entropy-calculator" }
+crossbeam-channel = "0.5"

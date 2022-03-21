@@ -2,37 +2,51 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use arithmatic_compressor::{adaptive_decode, adaptive_encode};
+use arithmatic_compressor::EncodedData;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "compressor")]
 struct Opt {
     #[structopt(short, long, parse(from_os_str))]
     file: PathBuf,
+    #[structopt(short, long, parse(from_os_str))]
+    output: PathBuf,
+    #[structopt(short, long)]
+    decode: bool,
 }
 
 fn main() {
     let opt = Opt::from_args();
 
-    let file_content = std::fs::read_to_string(opt.file).expect("erro reading file");
+    let file_content = std::fs::read(&opt.file).expect("error reading file");
 
-    let mut cumulative = [0; 257];
+    let mut cumulative = arithmatic_compressor::gen_cumulative(256);
 
-    for i in 0..257 {
-        cumulative[i] = i as u32;
+    if opt.decode {
+        let len = arithmatic_compressor::cast_bytes_to_u64(&file_content[..8]);
+        let symbols_count = arithmatic_compressor::cast_bytes_to_u64(&file_content[8..16]);
+
+        let data = &file_content[16..];
+
+        let decoded =
+            arithmatic_compressor::adaptive_decode(len as usize, symbols_count as usize, data, &mut cumulative, 256);
+
+        std::fs::write(opt.output, decoded).expect("couldn't write result");
+    } else {
+        arithmatic_compressor::show_file_entropy(&opt.file);
+
+        let EncodedData { len, mut data } =
+            arithmatic_compressor::adaptive_encode(&file_content[..], &mut cumulative, 256);
+        let symbols_count = file_content.len();
+
+        arithmatic_compressor::show_compression_ratio_and_symbol_len(symbols_count, data.len());
+
+        let mut len_bytes = arithmatic_compressor::cast_u64_to_bytes(len as u64);
+        let mut symbols_count_bytes = arithmatic_compressor::cast_u64_to_bytes(symbols_count as u64);
+
+        len_bytes.append(&mut symbols_count_bytes);
+        len_bytes.append(&mut data);
+
+        std::fs::write(opt.output, len_bytes).expect("couldn't write result");
     }
-
-    let encoded = adaptive_encode(file_content.as_bytes(), &mut cumulative, 256);
-
-    let mut cumulative = [0; 257];
-
-    for i in 0..257 {
-        cumulative[i] = i as u32;
-    }
-
-    let decoded = adaptive_decode(encoded.len, file_content.len(), &encoded.data, &mut cumulative, 256);
-
-    assert_eq!(decoded, file_content.as_bytes());
-
-    println!("{:?}", String::from_utf8_lossy(&decoded));
 }

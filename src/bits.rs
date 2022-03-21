@@ -1,3 +1,8 @@
+pub enum BIT {
+    ZERO,
+    ONE,
+}
+
 pub fn propagate_carry(byte: &mut u8, t: usize) -> bool {
     assert!(t < 8, "t has to be less than 8");
 
@@ -28,6 +33,13 @@ pub fn push_bit(byte: &mut u8, t: usize) {
     let mask = 2_u8.pow(t as u32) as u8;
 
     *byte |= mask;
+}
+
+pub fn push_into_d(t: &mut usize, bit: BIT, d: &mut Vec<u8>) {
+    if let BIT::ONE = bit {
+        let d_len = d.len();
+        push_bit(&mut d[d_len - 1], *t);
+    }
 }
 
 #[cfg(test)]
