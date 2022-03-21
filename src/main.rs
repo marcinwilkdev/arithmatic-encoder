@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use arithmatic_compressor::EncodedData;
+use arithmatic_compressor::{self, EncodedData};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "compressor")]
@@ -20,8 +20,6 @@ fn main() {
 
     let file_content = std::fs::read(&opt.file).expect("error reading file");
 
-    let mut cumulative = arithmatic_compressor::gen_cumulative(256);
-
     if opt.decode {
         let len = arithmatic_compressor::cast_bytes_to_u64(&file_content[..8]);
         let symbols_count = arithmatic_compressor::cast_bytes_to_u64(&file_content[8..16]);
@@ -29,20 +27,20 @@ fn main() {
         let data = &file_content[16..];
 
         let decoded =
-            arithmatic_compressor::adaptive_decode(len as usize, symbols_count as usize, data, &mut cumulative, 256);
+            arithmatic_compressor::decompress(len as usize, symbols_count as usize, data, 256);
 
         std::fs::write(opt.output, decoded).expect("couldn't write result");
     } else {
         arithmatic_compressor::show_file_entropy(&opt.file);
 
-        let EncodedData { len, mut data } =
-            arithmatic_compressor::adaptive_encode(&file_content[..], &mut cumulative, 256);
+        let EncodedData { len, mut data } = arithmatic_compressor::compress(&file_content[..], 256);
         let symbols_count = file_content.len();
 
         arithmatic_compressor::show_compression_ratio_and_symbol_len(symbols_count, data.len());
 
         let mut len_bytes = arithmatic_compressor::cast_u64_to_bytes(len as u64);
-        let mut symbols_count_bytes = arithmatic_compressor::cast_u64_to_bytes(symbols_count as u64);
+        let mut symbols_count_bytes =
+            arithmatic_compressor::cast_u64_to_bytes(symbols_count as u64);
 
         len_bytes.append(&mut symbols_count_bytes);
         len_bytes.append(&mut data);

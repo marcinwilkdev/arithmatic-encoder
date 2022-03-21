@@ -3,42 +3,49 @@ pub enum BIT {
     ONE,
 }
 
-pub fn propagate_carry(byte: &mut u8, t: usize) -> bool {
-    assert!(t < 8, "t has to be less than 8");
+pub fn propagate_carry(byte: &mut u8, curr_bit: usize) -> bool {
+    assert!(curr_bit < 8, "curr_bit has to be less than 8");
 
-    let mut mask = 2_u8.pow(t as u32) as u8;
+    let mut bit_repr = 2_u8.pow(curr_bit as u32) as u8;
 
     loop {
-        if (*byte & mask) > 0 {
+        if (*byte & bit_repr) > 0 {
             // swap 1 with 0
-            *byte -= mask;
+            *byte -= bit_repr;
         } else {
             // swap 0 with 1
-            *byte += mask;
+            *byte += bit_repr;
             return false;
         }
 
-        if mask == 128 {
+        if bit_repr == 128 {
             // propagate carry futher
             return true;
         }
 
-        mask <<= 1;
+        bit_repr <<= 1;
     }
 }
 
-pub fn push_bit(byte: &mut u8, t: usize) {
-    assert!(t < 8, "t has to be less than 8");
+pub fn push_bit_into_byte(byte: &mut u8, curr_bit: usize) {
+    assert!(curr_bit < 8, "curr_bit has to be less than 8");
 
-    let mask = 2_u8.pow(t as u32) as u8;
+    let bit_repr = 2_u8.pow(curr_bit as u32) as u8;
 
-    *byte |= mask;
+    *byte |= bit_repr;
 }
 
-pub fn push_into_d(t: &mut usize, bit: BIT, d: &mut Vec<u8>) {
+pub fn push_bit_into_compressed(curr_bit: &mut usize, bit: BIT, compressed: &mut Vec<u8>) {
     if let BIT::ONE = bit {
-        let d_len = d.len();
-        push_bit(&mut d[d_len - 1], *t);
+        let compressed_len = compressed.len();
+        push_bit_into_byte(&mut compressed[compressed_len - 1], *curr_bit);
+    }
+}
+
+pub fn check_last_byte_full(curr_bit: &mut usize, compressed: &mut Vec<u8>) {
+    if *curr_bit == 0 {
+        compressed.push(0);
+        *curr_bit = 8;
     }
 }
 
