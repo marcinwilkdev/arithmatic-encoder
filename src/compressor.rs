@@ -1,9 +1,9 @@
 use crate::bits;
 use crate::bits::BIT;
-use crate::helpers;
+use crate::helpers::{self, ALPHABET_LEN};
 
 pub const HALF: u32 = 0b1000_0000_0000_0000_0000_0000_0000_0000;
-pub const BLOCK_SIZE: usize = 256;
+pub const BLOCK_SIZE: usize = 128;
 
 #[derive(Debug)]
 pub struct EncodedData {
@@ -13,7 +13,7 @@ pub struct EncodedData {
 
 pub fn compress(data: &[u8], alphabet_len: usize) -> EncodedData {
     let mut compressed = vec![0];
-    let mut cumulative_distribution = helpers::gen_cumulative(alphabet_len);
+    let mut cumulative_distribution = helpers::gen_cumulative();
 
     // interval struct
     let mut begin_interval = 0; // b
@@ -21,12 +21,13 @@ pub fn compress(data: &[u8], alphabet_len: usize) -> EncodedData {
     let mut curr_bit = 8; // t
 
     let mut internal_block_index = 0;
-    let mut block = [0; BLOCK_SIZE];
+    let mut occurences = [1; ALPHABET_LEN];
 
     for (letter_index, letter) in data.iter().enumerate() {
         let begin_interval_copy = begin_interval;
         let cumulative_distribution_sum = letter_index as u64 + alphabet_len as u64 + 1;
 
+        // 8ms
         adaptive_interval_update(
             *letter,
             &mut begin_interval,
@@ -40,6 +41,7 @@ pub fn compress(data: &[u8], alphabet_len: usize) -> EncodedData {
             propagate_carry(curr_bit, &mut compressed);
         }
 
+        // 8ms
         if len_interval <= HALF {
             encoder_renormalization(
                 &mut begin_interval,
@@ -49,10 +51,10 @@ pub fn compress(data: &[u8], alphabet_len: usize) -> EncodedData {
             );
         }
 
-        update_block(&mut block, &mut internal_block_index, *letter);
+        update_block(&mut occurences, &mut internal_block_index, *letter);
 
         if internal_block_index == 0 {
-            update_distribution_block(block, &mut cumulative_distribution, alphabet_len);
+            update_distribution_block(&occurences, &mut cumulative_distribution);
         }
     }
 
@@ -136,9 +138,12 @@ fn code_value_selection(begin_interval: u32, curr_bit: &mut usize, compressed: &
 }
 
 // no test
-pub fn update_block(block: &mut [u8; BLOCK_SIZE], internal_block_index: &mut usize, letter: u8) {
-    block[*internal_block_index] = letter;
-
+pub fn update_block(
+    occurences: &mut [u32; ALPHABET_LEN],
+    internal_block_index: &mut usize,
+    letter: u8,
+) {
+    occurences[letter as usize] += 1;
     *internal_block_index += 1;
 
     if *internal_block_index > BLOCK_SIZE - 1 {
@@ -148,14 +153,14 @@ pub fn update_block(block: &mut [u8; BLOCK_SIZE], internal_block_index: &mut usi
 
 // no test
 pub fn update_distribution_block(
-    letters: [u8; BLOCK_SIZE],
+    occurences: &[u32; ALPHABET_LEN],
     cumulative_distribution: &mut [u32],
-    alphabet_len: usize,
 ) {
-    for letter in letters {
-        for letter_index in (letter as usize) + 1..=alphabet_len {
-            cumulative_distribution[letter_index] += 1;
-        }
+    let mut total = 0;
+
+    for i in 0..occurences.len() {
+        total += occurences[i];
+        cumulative_distribution[i + 1] = total;
     }
 }
 

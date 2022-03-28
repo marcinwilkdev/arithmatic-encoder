@@ -8,7 +8,7 @@ pub fn decompress(
     alphabet_len: usize,
 ) -> Vec<u8> {
     let mut decompressed = Vec::new();
-    let mut cumulative = helpers::gen_cumulative(alphabet_len);
+    let mut cumulative = helpers::gen_cumulative();
 
     let mut begin_interval = 0;
     let mut len_interval = u32::MAX;
@@ -17,7 +17,8 @@ pub fn decompress(
     let mut curr_bit = if bits_count < 32 { bits_count - 1 } else { 31 };
 
     let mut internal_block_index = 0;
-    let mut block = [0; compressor::BLOCK_SIZE];
+
+    let mut occurences = [1; helpers::ALPHABET_LEN];
 
     for letter_index in 0..letters_count {
         let cumulative_distribution_sum = letter_index as u64 + alphabet_len as u64 + 1;
@@ -44,13 +45,11 @@ pub fn decompress(
             );
         }
 
-        compressor::update_block(&mut block, &mut internal_block_index, letter);
+        compressor::update_block(&mut occurences, &mut internal_block_index, letter);
 
         if internal_block_index == 0 {
-            compressor::update_distribution_block(block, &mut cumulative, alphabet_len);
+            compressor::update_distribution_block(&occurences, &mut cumulative);
         }
-
-        // compressor::update_distribution(letter, &mut cumulative, alphabet_len);
     }
 
     return decompressed;
