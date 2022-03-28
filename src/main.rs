@@ -33,7 +33,12 @@ fn main() {
     } else {
         arithmatic_compressor::show_file_entropy(&opt.file);
 
+        let start = std::time::Instant::now();
+
         let EncodedData { len, mut data } = arithmatic_compressor::compress(&file_content[..], 256);
+
+        println!("Compressing time: {:?}", std::time::Instant::now() - start);
+
         let symbols_count = file_content.len();
 
         arithmatic_compressor::show_compression_ratio_and_symbol_len(symbols_count, data.len());
