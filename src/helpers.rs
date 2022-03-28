@@ -1,3 +1,5 @@
+pub const ALPHABET_LEN: usize = 256;
+
 pub fn cast_u64_to_bytes(number: u64) -> Vec<u8> {
     let mut bytes = vec![0; 8];
 
@@ -22,10 +24,16 @@ pub fn cast_bytes_to_u64(bytes: &[u8]) -> u64 {
     number
 }
 
-pub fn gen_cumulative(alphabet_len: usize) -> Vec<u32> {
-    assert!(alphabet_len < u32::MAX as usize, "Alphabet len too big");
+pub fn gen_cumulative() -> [u32; ALPHABET_LEN + 1] {
+    assert!(ALPHABET_LEN < u32::MAX as usize, "Alphabet len too big");
 
-    (0..=alphabet_len).map(|s| s as u32).collect()
+    let mut cumulative = [0; ALPHABET_LEN + 1];
+
+    for i in 0..=ALPHABET_LEN {
+        cumulative[i] = i as u32;
+    }
+
+    cumulative
 }
 
 pub fn get_first_data_chunk(data: &[u8]) -> u32 {
