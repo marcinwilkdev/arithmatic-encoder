@@ -25,12 +25,12 @@ pub fn show_file_entropy(filename: &PathBuf) {
 }
 
 pub fn show_compression_ratio_and_symbol_len(symbols_count: usize, new_symbols_count: usize) {
-    let compression_ratio = symbols_count as f64 / new_symbols_count as f64;
+    let compression_ratio = new_symbols_count as f64 / symbols_count as f64;
 
     println!("Compression ratio: {}", compression_ratio);
 
     println!(
         "Average symbol encoding length: {}",
-        8.0 / compression_ratio
+        8.0 * compression_ratio
     );
 }
