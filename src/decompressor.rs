@@ -16,6 +16,9 @@ pub fn decompress(
 
     let mut curr_bit = if bits_count < 32 { bits_count - 1 } else { 31 };
 
+    let mut internal_block_index = 0;
+    let mut block = [0; compressor::BLOCK_SIZE];
+
     for letter_index in 0..letters_count {
         let cumulative_distribution_sum = letter_index as u64 + alphabet_len as u64 + 1;
 
@@ -41,7 +44,13 @@ pub fn decompress(
             );
         }
 
-        compressor::update_distribution(letter, &mut cumulative, alphabet_len);
+        compressor::update_block(&mut block, &mut internal_block_index, letter);
+
+        if internal_block_index == 0 {
+            compressor::update_distribution_block(block, &mut cumulative, alphabet_len);
+        }
+
+        // compressor::update_distribution(letter, &mut cumulative, alphabet_len);
     }
 
     return decompressed;
@@ -100,7 +109,7 @@ fn decoder_renormalization(
     data: &[u8],
     bits_count: usize,
 ) {
-    while *len_interval <= HALF {
+    while *len_interval < HALF {
         *begin_interval <<= 1;
         *data_chunk <<= 1;
 
